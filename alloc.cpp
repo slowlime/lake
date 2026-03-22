@@ -1,3 +1,4 @@
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -23,6 +24,95 @@ void get_usage(struct rusage &usage) {
         exit(EXIT_FAILURE);
     }
 }
+
+size_t round_up(size_t n, size_t unit) {
+    auto mod = n % unit;
+
+    return mod == 0 ? n : n + unit - mod;
+}
+
+class Pool {
+public:
+    Pool() noexcept = default;
+
+    static Pool with_max_size(size_t max) {
+        return Pool(max);
+    }
+
+    void *alloc(size_t size) {
+        return (end -= size);
+    }
+
+    template<class T>
+    T *alloc() {
+        return reinterpret_cast<T *>(alloc(sizeof(T)));
+    }
+
+    void dealloc() {
+        if (munmap(arena, mmap_size) == -1) {
+            perror("Could not unmap memory");
+        }
+
+        arena = nullptr;
+        mmap_size = 0;
+    }
+
+private:
+    explicit Pool(size_t max) {
+        auto guard_size = guard_page_count * page_size;
+        auto mmap_size = round_up(max) + guard_size;
+
+        void *arena = mmap(
+            nullptr,
+            mmap_size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN,
+            0,
+            0
+        );
+
+        if (arena == MAP_FAILED) {
+            perror("Cannot allocate memory");
+            exit(EXIT_FAILURE);
+        }
+
+        if (mprotect(arena, guard_size, PROT_NONE) == -1) {
+            perror("Cannot guard pages");
+            exit(EXIT_FAILURE);
+        }
+
+        this->arena = arena;
+        this->mmap_size = mmap_size;
+        end = static_cast<char *>(arena) + mmap_size;
+    }
+
+    static size_t page_size;
+    static constexpr size_t guard_page_count = 1;
+
+    static size_t round_up(size_t n) {
+        n += page_size - 1;
+
+        return n & ~(page_size - 1);
+    }
+
+    void *arena = nullptr;
+    char *end = nullptr;
+    size_t mmap_size = 0;
+};
+
+size_t Pool::page_size = ([] {
+    auto result = sysconf(_SC_PAGE_SIZE);
+
+    if (result < 0) {
+        perror("Cannot determine the page size");
+        exit(EXIT_FAILURE);
+    }
+
+    // for peace of mind.
+    assert((result & result - 1) == 0);
+
+    return result;
+})();
 
 struct Node {
     Node *next;
@@ -52,60 +142,13 @@ struct NewDeleteAlloc {
     }
 };
 
-size_t round_up(size_t n, size_t unit) {
-    auto mod = n % unit;
-
-    return mod == 0 ? n : n + unit - mod;
-}
-
 struct MmapAlloc {
-    static constexpr size_t guard_page_count = 8;
-
-    Node *start = nullptr;
-    size_t page_size;
-    size_t alloc_size = 0;
-    size_t guard_size;
-
-    MmapAlloc() {
-        auto page_size = sysconf(_SC_PAGE_SIZE);
-
-        if (page_size < 0) {
-            perror("Cannot determine the page size");
-            exit(EXIT_FAILURE);
-        }
-
-        this->page_size = page_size;
-        guard_size = this->page_size * guard_page_count;
-    }
-
     Node *alloc_list(size_t n) {
-        auto unguarded_size = round_up(n * sizeof(Node), page_size);
-        alloc_size = unguarded_size + 2 * guard_size;
-
-        void *alloc = mmap(
-            nullptr,
-            alloc_size,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN,
-            0,
-            0
-        );
-
-        if (alloc == MAP_FAILED) {
-            perror("Cannot allocate memory");
-            exit(EXIT_FAILURE);
-        }
-
-        auto *end = reinterpret_cast<Node *>(static_cast<char *>(alloc) + alloc_size - guard_size);
-
-        guard_pages(alloc);
-        guard_pages(end);
-
-        start = static_cast<Node *>(alloc);
+        pool_ = Pool::with_max_size(n * sizeof(Node));
         Node *result = nullptr;
 
         for (size_t i = 0; i < n; ++i) {
-            result = new (static_cast<void *>(--end)) Node{
+            result = new (pool_.alloc<Node>()) Node{
                 .next = result,
                 .node_id = i,
             };
@@ -115,17 +158,11 @@ struct MmapAlloc {
     }
 
     void dealloc_list(Node *) {
-        munmap(start, alloc_size);
-        start = nullptr;
-        alloc_size = 0;
+        pool_.dealloc();
     }
 
 private:
-    void guard_pages(void *lo) const {
-        if (mprotect(lo, guard_size, PROT_NONE) == -1) {
-            perror("Cannot add guard pages");
-        }
-    }
+    Pool pool_;
 };
 
 template<class Alloc>

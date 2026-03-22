@@ -16,8 +16,8 @@ Memory used: 314888192 bytes
 Overhead: 49.2%
 
 $ ./alloc mmap
-Time used: 3823 usec
-Memory used: 156737536 bytes
+Time used: 3314 usec
+Memory used: 156770304 bytes
 Overhead: -2.1%
 ```
 
@@ -25,6 +25,6 @@ The memory measurements are clearly suspect.
 For `mmap`, the actual breakdown is as follows:
 - 160002048 bytes allocated for the elements
   - the extra 2048 B (0.001%) are there to align at a page boundary
-- 65536 bytes protected but aren't read or written to, only taking up space in the page table
+- 4096 bytes protected but aren't read or written to, only taking up space in the page table
 
 (Confirmed by running GDB and inspecting `info proc mappings`.)
