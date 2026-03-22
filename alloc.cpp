@@ -25,10 +25,10 @@ void get_usage(struct rusage &usage) {
     }
 }
 
-size_t round_up(size_t n, size_t unit) {
-    auto mod = n % unit;
+size_t round_up(size_t n, size_t alignment) {
+    n += alignment - 1;
 
-    return mod == 0 ? n : n + unit - mod;
+    return n & ~(alignment - 1);
 }
 
 class Pool {
@@ -39,13 +39,18 @@ public:
         return Pool(max);
     }
 
-    void *alloc(size_t size) {
+    void *alloc(size_t size, size_t align) {
+        if ((uintptr_t(end) & align - 1) != 0) [[unlikely]] {
+            // round down to the nearest alignment boundary.
+            end -= uintptr_t(end) & align - 1;
+        }
+
         return (end -= size);
     }
 
     template<class T>
     T *alloc() {
-        return reinterpret_cast<T *>(alloc(sizeof(T)));
+        return reinterpret_cast<T *>(alloc(sizeof(T), alignof(T)));
     }
 
     void dealloc() {
@@ -60,7 +65,7 @@ public:
 private:
     explicit Pool(size_t max) {
         auto guard_size = guard_page_count * page_size;
-        auto mmap_size = round_up(max) + guard_size;
+        auto mmap_size = round_up(max, page_size) + guard_size;
 
         void *arena = mmap(
             nullptr,
@@ -88,12 +93,6 @@ private:
 
     static size_t page_size;
     static constexpr size_t guard_page_count = 1;
-
-    static size_t round_up(size_t n) {
-        n += page_size - 1;
-
-        return n & ~(page_size - 1);
-    }
 
     void *arena = nullptr;
     char *end = nullptr;
