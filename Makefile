@@ -8,10 +8,11 @@ all: alloc
 clean:
 	rm -f alloc *.o
 
-alloc: blackbox.o alloc.o
+alloc: blackbox.o alloc.o pool.o
 	$(CXX) -std=c++11 $(CXXFLAGS) $^ -o $@
 
 %.o: %.c
 	$(CXX) -std=c++11 $(CXXFLAGS) $< -o $@
 
-alloc.cpp: blackbox.cpp
+alloc.o: blackbox.hpp pool.hpp
+pool.o: pool.hpp

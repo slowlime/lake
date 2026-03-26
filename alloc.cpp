@@ -1,16 +1,12 @@
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <string_view>
-#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/time.h>
-#include <unistd.h>
 
 #include "blackbox.hpp"
+#include "pool.hpp"
 
 namespace {
 
@@ -24,94 +20,6 @@ void get_usage(struct rusage &usage) {
         exit(EXIT_FAILURE);
     }
 }
-
-size_t round_up(size_t n, size_t alignment) {
-    n += alignment - 1;
-
-    return n & ~(alignment - 1);
-}
-
-class Pool {
-public:
-    Pool() noexcept = default;
-
-    static Pool with_max_size(size_t max) {
-        return Pool(max);
-    }
-
-    void *alloc(size_t size, size_t align) {
-        if ((uintptr_t(end) & align - 1) != 0) [[unlikely]] {
-            // round down to the nearest alignment boundary.
-            end -= uintptr_t(end) & align - 1;
-        }
-
-        return (end -= size);
-    }
-
-    template<class T>
-    T *alloc() {
-        return reinterpret_cast<T *>(alloc(sizeof(T), alignof(T)));
-    }
-
-    void dealloc() {
-        if (munmap(arena, mmap_size) == -1) {
-            perror("Could not unmap memory");
-        }
-
-        arena = nullptr;
-        mmap_size = 0;
-    }
-
-private:
-    explicit Pool(size_t max) {
-        auto guard_size = guard_page_count * page_size;
-        auto mmap_size = round_up(max, page_size) + guard_size;
-
-        void *arena = mmap(
-            nullptr,
-            mmap_size,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN,
-            0,
-            0
-        );
-
-        if (arena == MAP_FAILED) {
-            perror("Cannot allocate memory");
-            exit(EXIT_FAILURE);
-        }
-
-        if (mprotect(arena, guard_size, PROT_NONE) == -1) {
-            perror("Cannot guard pages");
-            exit(EXIT_FAILURE);
-        }
-
-        this->arena = arena;
-        this->mmap_size = mmap_size;
-        end = static_cast<char *>(arena) + mmap_size;
-    }
-
-    static size_t page_size;
-    static constexpr size_t guard_page_count = 1;
-
-    void *arena = nullptr;
-    char *end = nullptr;
-    size_t mmap_size = 0;
-};
-
-size_t Pool::page_size = ([] {
-    auto result = sysconf(_SC_PAGE_SIZE);
-
-    if (result < 0) {
-        perror("Cannot determine the page size");
-        exit(EXIT_FAILURE);
-    }
-
-    // for peace of mind.
-    assert((result & result - 1) == 0);
-
-    return result;
-})();
 
 struct Node {
     Node *next;
@@ -143,7 +51,7 @@ struct NewDeleteAlloc {
 
 struct MmapAlloc {
     Node *alloc_list(size_t n) {
-        pool_ = Pool::with_max_size(n * sizeof(Node));
+        pool_ = Pool<>::with_max_size(n * sizeof(Node));
         Node *result = nullptr;
 
         for (size_t i = 0; i < n; ++i) {
@@ -161,7 +69,7 @@ struct MmapAlloc {
     }
 
 private:
-    Pool pool_;
+    Pool<> pool_;
 };
 
 template<class Alloc>
