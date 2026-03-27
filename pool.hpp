@@ -1,9 +1,11 @@
 #include <atomic>
 #include <cassert>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string_view>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <utility>
@@ -76,10 +78,52 @@ struct AtomicBump {
     std::atomic<char *> end;
 };
 
+class PoolRegistration {
+public:
+    PoolRegistration(const PoolRegistration &) = delete;
+    PoolRegistration &operator=(const PoolRegistration &) = delete;
+
+    static PoolRegistration *add(std::string_view name, void *guard_start, void *guard_end);
+    void remove() noexcept;
+
+    static void register_sigsegv_handler() noexcept;
+
+private:
+    PoolRegistration(char *name, void *start, void *end) noexcept;
+
+    static void cleanup() noexcept;
+    static void on_sigsegv(int sig, siginfo_t *info, void *uctx) noexcept;
+
+    static std::atomic<PoolRegistration *> head;
+    static std::atomic<bool> has_removed;
+    static std::atomic<bool> cleanup_in_progress;
+    static_assert(decltype(head)::is_always_lock_free);
+    static_assert(decltype(has_removed)::is_always_lock_free);
+    static_assert(decltype(cleanup_in_progress)::is_always_lock_free);
+
+    std::atomic<char *> name_;
+    std::atomic<void *> start_;
+    std::atomic<void *> end_;
+    static_assert(decltype(name_)::is_always_lock_free);
+    static_assert(decltype(start_)::is_always_lock_free);
+    static_assert(decltype(end_)::is_always_lock_free);
+
+    std::atomic<PoolRegistration *> next_ = nullptr;
+    std::atomic<bool> removed_ = false;
+    static_assert(decltype(next_)::is_always_lock_free);
+    static_assert(decltype(removed_)::is_always_lock_free);
+};
+
 template<class Bump = UnsyncBump>
 class Pool {
 public:
     Pool() noexcept = default;
+
+    ~Pool() noexcept {
+        if (registration_ != nullptr) {
+            registration_->remove();
+        }
+    }
 
     Pool(Pool &&other) noexcept {
         *this = std::move(other);
@@ -93,12 +137,13 @@ public:
         std::swap(arena_, other.arena_);
         std::swap(bump_, other.bump_);
         std::swap(mmap_size_, other.mmap_size_);
+        std::swap(registration_, other.registration_);
 
         return *this;
     }
 
-    static Pool with_max_size(size_t max) {
-        return Pool(max);
+    static Pool with_max_size(std::string_view name, size_t max) {
+        return Pool(name, max);
     }
 
     void *alloc(size_t size, size_t align) {
@@ -120,7 +165,7 @@ public:
     }
 
 private:
-    explicit Pool(size_t max) {
+    explicit Pool(std::string_view name, size_t max) {
         auto guard_size = guard_page_count * page_size;
         auto mmap_size = round_up(max, page_size) + guard_size;
 
@@ -146,6 +191,7 @@ private:
         arena_ = arena;
         mmap_size_ = mmap_size;
         bump_ = static_cast<char *>(arena) + mmap_size;
+        registration_ = PoolRegistration::add(name, arena, static_cast<char *>(arena) + guard_size);
     }
 
     static constexpr size_t guard_page_count = 1;
@@ -153,4 +199,5 @@ private:
     void *arena_ = nullptr;
     Bump bump_ = nullptr;
     size_t mmap_size_ = 0;
+    PoolRegistration *registration_ = nullptr;
 };

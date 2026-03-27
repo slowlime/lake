@@ -51,7 +51,7 @@ struct NewDeleteAlloc {
 
 struct MmapAlloc {
     Node *alloc_list(size_t n) {
-        pool_ = Pool<>::with_max_size(n * sizeof(Node));
+        pool_ = Pool<>::with_max_size("test pool", n * sizeof(Node));
         Node *result = nullptr;
 
         for (size_t i = 0; i < n; ++i) {
