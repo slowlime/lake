@@ -1,11 +1,15 @@
 # Memory allocation experiments
+This repository houses two memory allocation experiments: a single-threaded version and a multi-threaded one.
+
+To build them, run `make`.
+You'll need a C++20-capable compiler.
+
+## Single-threaded allocation (`alloc`)
 `alloc.cpp` allocates a linked list of 10 million elements (each node being `sizeof(void *) + sizeof(size_t)` in size) and measures resource usage (via `getrusage`).
 
 The allocation is performed in one of the two ways (selected with a command-line argument):
 - `malloc` uses C++'s builtin `new`/`delete` operators, which essentially amount to `malloc`/`free`.
 - `mmap` allocates memory pages (with the `MAP_GROWSDOWN` flag) as well as guard pages at either end protected against any access to catch memory errors.
-
-To build the program, run `make`.
 
 The results on my machine:
 
@@ -28,3 +32,50 @@ For `mmap`, the actual breakdown is as follows:
 - 4096 bytes protected but aren't read or written to, only taking up space in the page table
 
 (Confirmed by running GDB and inspecting `info proc mappings`.)
+
+## Multi-threaded allocation (`threaded`)
+`threaded.cpp` is basically `alloc.cpp` but multi-threaded.
+It spawns 16 threads and allocates a 10-million-element list in each.
+It takes a command-line argument that chooses the particular allocation strategy:
+
+- `malloc` uses C++'s builtin `new`/`delete` operators, which essentially amount to `malloc`/`free`.
+- `mutex` allocates a shared pool protected with a mutex.
+- `atomic` replaces the mutex with atomic operations.
+- `thread-local` does away with the shared pool altogether and instead creates one per thread.
+
+The results on my machine:
+
+```
+$ ./threaded malloc
+Running with 16 threads
+Time used: 2328241 usec
+Memory used: 5113348096 bytes
+Overhead: 49.9%
+
+$ ./threaded mutex
+Running with 16 threads
+Time used: 22862510 usec
+Memory used: 2553077760 bytes
+Overhead: -0.3%
+
+$ ./threaded atomic
+Running with 16 threads
+Time used: 88821150 usec
+Memory used: 2553204736 bytes
+Overhead: -0.3%
+
+$ ./threaded thread-local
+Running with 16 threads
+Time used: 406772 usec
+Memory used: 2554327040 bytes
+Overhead: -0.2%
+```
+
+Or, in a table:
+
+Strategy | Time (utime, μs) | Time (wall, s) | Memory (B) | Reported overhead (%)
+:--------|:-----------------|:---------------|:-----------|:---------------------
+`malloc` | 2328241 | 2.02 | 5113348096 | 49.9
+`mutex` | 22862510 | 9.06 | 2553077760 | -0.3
+`atomic` | 88821150 | 6.63 | 2553204736 | -0.3
+`thread-local` | 406772 | 0.21 | 2554327040 | -0.2

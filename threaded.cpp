@@ -179,8 +179,7 @@ void run_worker(Strategy &strategy, std::barrier<> &barrier, size_t thread_id, s
 }
 
 template<class Strategy>
-void test(size_t n) {
-    size_t thread_count = std::thread::hardware_concurrency();
+void test(size_t n, size_t thread_count) {
     Strategy strategy(thread_count, n);
     std::barrier barrier(std::ptrdiff_t(thread_count + 1));
 
@@ -231,6 +230,7 @@ void test(size_t n) {
 }
 
 constexpr size_t n = 10'000'000;
+constexpr size_t thread_count = 16;
 
 } // namespace
 
@@ -246,13 +246,13 @@ int main(const int argc, const char *argv[]) {
     std::string_view mode = argv[1];
 
     if (mode == "malloc") {
-        test<NewDeleteStrategy>(n);
+        test<NewDeleteStrategy>(n, thread_count);
     } else if (mode == "mutex") {
-        test<MutexStrategy>(n);
+        test<MutexStrategy>(n, thread_count);
     } else if (mode == "atomic") {
-        test<AtomicStrategy>(n);
+        test<AtomicStrategy>(n, thread_count);
     } else if (mode == "thread-local") {
-        test<ThreadLocalStrategy>(n);
+        test<ThreadLocalStrategy>(n, thread_count);
     } else {
         print_usage();
 
