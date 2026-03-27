@@ -156,32 +156,34 @@ void reraise_signal(int sig) noexcept {
 } // namespace
 
 void PoolRegistration::on_sigsegv(int sig, siginfo_t *info, void *uctx) noexcept {
-    void *addr = info->si_addr;
+    if (info->si_code == SEGV_ACCERR) {
+        void *addr = info->si_addr;
 
-    const PoolRegistration *registration;
+        const PoolRegistration *registration;
 
-    for (const auto *next = &head;
-         (registration = next->load(std::memory_order_relaxed)) != nullptr;
-         next = &registration->next_) {
-        if (registration->removed_.load(std::memory_order_relaxed)) {
-            continue;
+        for (const auto *next = &head;
+             (registration = next->load(std::memory_order_relaxed)) != nullptr;
+             next = &registration->next_) {
+            if (registration->removed_.load(std::memory_order_relaxed)) {
+                continue;
+            }
+
+            if (addr < registration->start_.load(std::memory_order_relaxed) ||
+                addr >= registration->end_.load(std::memory_order_relaxed)) {
+                continue;
+            }
+
+            static const char overflow_msg_start[] = "overflow detected in pool '";
+            static const char overflow_msg_end[] = "'\n";
+
+            const auto *name = registration->name_.load(std::memory_order_relaxed);
+
+            write(STDERR_FILENO, overflow_msg_start, sizeof(overflow_msg_start) - 1);
+            write(STDERR_FILENO, name, strlen(name));
+            write(STDERR_FILENO, overflow_msg_end, sizeof(overflow_msg_end) - 1);
+
+            reraise_signal(sig);
         }
-
-        if (addr < registration->start_.load(std::memory_order_relaxed) ||
-            addr >= registration->end_.load(std::memory_order_relaxed)) {
-            continue;
-        }
-
-        static const char overflow_msg_start[] = "overflow detected in pool '";
-        static const char overflow_msg_end[] = "'\n";
-
-        const auto *name = registration->name_.load(std::memory_order_relaxed);
-
-        write(STDERR_FILENO, overflow_msg_start, sizeof(overflow_msg_start) - 1);
-        write(STDERR_FILENO, name, strlen(name));
-        write(STDERR_FILENO, overflow_msg_end, sizeof(overflow_msg_end) - 1);
-
-        reraise_signal(sig);
     }
 
     // dispatch to the previous handler.
