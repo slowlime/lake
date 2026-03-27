@@ -115,30 +115,45 @@ std::atomic<bool> PoolRegistration::cleanup_in_progress = false;
 
 namespace {
 
-std::atomic<void (*)(int)> prev_handler = nullptr;
-std::atomic<void (*)(int, siginfo_t *, void *)> prev_sigaction = nullptr;
-
-static_assert(decltype(prev_handler)::is_always_lock_free);
-static_assert(decltype(prev_sigaction)::is_always_lock_free);
+void (*prev_handler)(int) = nullptr;
+void (*prev_sigaction)(int, siginfo_t *, void *) = nullptr;
 
 } // namespace
 
 void PoolRegistration::register_sigsegv_handler() noexcept {
-    struct sigaction act{};
-    act.sa_flags = SA_SIGINFO;
-    act.sa_sigaction = on_sigsegv;
     struct sigaction prev;
 
-    if (sigaction(SIGSEGV, &act, &prev) < 0) {
-        perror("Could not install a SIGSEGV handler");
+    if (sigaction(SIGSEGV, nullptr, &prev) < 0) {
+        perror("Could not retrieve the previous SIGSEGV handler");
+        return;
     }
 
     if ((prev.sa_flags & SA_SIGINFO) != 0) {
-        prev_sigaction.store(prev.sa_sigaction, std::memory_order_relaxed);
+        prev_sigaction = prev.sa_sigaction;
     } else {
-        prev_handler.store(prev.sa_handler, std::memory_order_relaxed);
+        prev_handler = prev.sa_handler;
+    }
+
+    struct sigaction act{};
+    act.sa_flags = SA_SIGINFO;
+    act.sa_sigaction = on_sigsegv;
+
+    if (sigaction(SIGSEGV, &act, nullptr) < 0) {
+        perror("Could not install a SIGSEGV handler");
+        return;
     }
 }
+
+namespace {
+
+void reraise_signal(int sig) noexcept {
+    struct sigaction act {};
+    act.sa_handler = SIG_DFL;
+    sigaction(sig, &act, nullptr);
+    raise(sig);
+}
+
+} // namespace
 
 void PoolRegistration::on_sigsegv(int sig, siginfo_t *info, void *uctx) noexcept {
     void *addr = info->si_addr;
@@ -165,26 +180,16 @@ void PoolRegistration::on_sigsegv(int sig, siginfo_t *info, void *uctx) noexcept
         write(STDERR_FILENO, overflow_msg_start, sizeof(overflow_msg_start) - 1);
         write(STDERR_FILENO, name, strlen(name));
         write(STDERR_FILENO, overflow_msg_end, sizeof(overflow_msg_end) - 1);
+
+        reraise_signal(sig);
     }
 
     // dispatch to the previous handler.
-    if (auto handler = prev_sigaction.load(std::memory_order_relaxed)) {
-        handler(sig, info, uctx);
-
-        return;
-    }
-
-    auto handler = prev_handler.load(std::memory_order_relaxed);
-
-    if (handler == SIG_IGN) {
-        // do nothing.
-    } else if (handler == SIG_DFL) {
-        // restore the default handler.
-        struct sigaction act {};
-        act.sa_handler = handler;
-        sigaction(sig, &act, nullptr);
-        raise(sig);
+    if (prev_sigaction != nullptr) {
+        prev_sigaction(sig, info, uctx);
+    } else if (prev_handler == nullptr || prev_handler == SIG_IGN || prev_handler == SIG_DFL) {
+        reraise_signal(sig);
     } else {
-        handler(sig);
+        prev_handler(sig);
     }
 }
