@@ -169,7 +169,6 @@ bool _ = TestRunner::tests
                  [](auto &test) {
                      StringRef ref;
 
-                     CHECK_EQ(ref.get(), nullptr);
                      CHECK_TRUE(!ref.unique());
                      CHECK_TRUE(ref.shared());
                      CHECK_EQ(ref.size(), 0);
@@ -183,7 +182,6 @@ bool _ = TestRunner::tests
                      std::string str = "hello, world";
                      StringRef ref(str);
 
-                     CHECK_NE(ref.get(), nullptr);
                      CHECK_EQ(ref.view(), str);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
@@ -199,7 +197,6 @@ bool _ = TestRunner::tests
                      str = str.substr(0, 5);
                      StringRef ref(str);
 
-                     CHECK_NE(ref.get(), nullptr);
                      CHECK_EQ(ref.view(), str);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
@@ -214,7 +211,6 @@ bool _ = TestRunner::tests
                      const char str[] = "hello, world";
                      StringRef ref(str);
 
-                     CHECK_NE(ref.get(), nullptr);
                      CHECK_EQ(ref.view(), str);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
@@ -229,7 +225,6 @@ bool _ = TestRunner::tests
                      const char str[] = "hello, world";
                      StringRef ref(str, 5);
 
-                     CHECK_NE(ref.get(), nullptr);
                      CHECK_EQ(ref.view(), "hello");
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
