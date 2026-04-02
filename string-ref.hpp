@@ -1,12 +1,11 @@
 #pragma once
 
-#include <cassert>
 #include <compare>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <memory>
-#include <new>
 #include <ostream>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -25,29 +24,18 @@ public:
 #endif
 
         if (unique()) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
-            std::destroy_at(header());
-
-            // triggers a false positive (-Wfree-nonheap-object) for default-initialized StringRefs
-            // on GCC: it believes this code is reachable when ptr_ == &empty, despite this not
-            // being the case.
-            delete[] ptr_;
-#pragma GCC diagnostic pop
+            delete[] ptr();
         }
     }
 
-    StringRef(std::string_view s) : StringRef(s.data(), s.size()) {}
-    StringRef(const char *s) : StringRef(s, strlen(s)) {}
+    explicit StringRef(const std::string &s) : StringRef(s.data(), s.size()) {}
+    explicit StringRef(std::string_view s) : StringRef(s.data(), s.size()) {}
+    explicit StringRef(const char *s) : StringRef(s, strlen(s)) {}
 
     StringRef(const char *s, size_t len) {
-        assert(len <= max_len);
-
-        ptr_ = new char[sizeof(Header) + len + 1];
-        new (header()) Header;
-        header()->len = len;
-        memcpy(data(), s, len);
-        data()[len] = '\0';
+        s_ = new char[len + 1];
+        len_ = len;
+        memcpy(s_, s, len);
         mark_unique();
     }
 
@@ -61,7 +49,8 @@ public:
         }
 
         other.mark_shared();
-        ptr_ = other.ptr_;
+        s_ = other.s_;
+        len_ = other.len_;
 
         return *this;
     }
@@ -75,33 +64,34 @@ public:
             return *this;
         }
 
-        std::swap(ptr_, other.ptr_);
+        std::swap(s_, other.s_);
+        std::swap(len_, other.len_);
 
         return *this;
     }
 
     bool shared() const noexcept {
-        return header()->shared > 0;
+        return !marked();
     }
 
     bool unique() const noexcept {
-        return !shared();
+        return marked();
     }
 
     const char *get() const noexcept {
-        return data();
+        return ptr();
     }
 
     std::string_view view() const noexcept {
-        return {get(), size()};
+        return {get(), len_};
     }
 
     size_t size() const noexcept {
-        return header()->len;
+        return len_;
     }
 
     size_t length() const noexcept {
-        return size();
+        return len_;
     }
 
     bool operator==(const StringRef &other) const noexcept {
@@ -109,10 +99,6 @@ public:
     }
 
     bool operator==(std::string_view other) const noexcept {
-        return view() == other;
-    }
-
-    bool operator==(const char *other) const noexcept {
         return view() == other;
     }
 
@@ -124,45 +110,38 @@ public:
         return view() <=> other;
     }
 
-    std::strong_ordering operator<=>(const char *other) const noexcept {
-        return view() <=> other;
-    }
-
     friend std::ostream &operator<<(std::ostream &s, const StringRef &ref) {
-        return s << "StringRef(" << (const void *)ref.ptr_ << " \"" << ref.view() << "\" ("
+        return s << "StringRef(" << (const void *)ref.ptr() << " \"" << ref.view() << "\" ("
                  << (ref.unique() ? "unique" : "shared") << "))";
     }
 
 private:
-    struct Header {
-        size_t shared : 1;
-        size_t len : sizeof(size_t) * 8 - 1;
-    };
+    static constexpr uintptr_t mark_bit = 1;
 
-    static inline Header empty{
-        .shared = 1,
-        .len = 0,
-    };
-
-    static constexpr size_t max_len = -size_t(1) >> 1;
-
-    Header *header() const noexcept {
-        // cue in C++ shenanigans.
-        return std::launder(reinterpret_cast<Header *>(ptr_));
+    char *ptr() const noexcept {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        return reinterpret_cast<char *>(reinterpret_cast<uintptr_t>(s_) & ~mark_bit);
     }
 
-    char *data() const noexcept {
-        // no need to launder: this is part of the same object that ptr_ points to.
-        return ptr_ + sizeof(Header);
+    bool marked() const noexcept {
+        return (reinterpret_cast<uintptr_t>(s_) & mark_bit) != 0;
+    }
+
+    void set_mark(bool unique) const noexcept {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        s_ = reinterpret_cast<char *>(
+            (reinterpret_cast<uintptr_t>(s_) & ~mark_bit) | uintptr_t(unique) * mark_bit
+        );
     }
 
     void mark_unique() const noexcept {
-        header()->shared = 0;
+        set_mark(true);
     }
 
     void mark_shared() const noexcept {
-        header()->shared = 1;
+        set_mark(false);
     }
 
-    char *ptr_ = reinterpret_cast<char *>(&empty);
+    mutable char *s_ = nullptr;
+    size_t len_ = 0;
 };
