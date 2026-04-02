@@ -10,6 +10,8 @@
 
 namespace {
 
+using namespace std::string_view_literals;
+
 #define CHECK_TRUE(EXPR) test.check_true(__LINE__, #EXPR, (EXPR))
 #define CHECK_EQ(LHS, RHS) test.check_eq(__LINE__, #LHS, #RHS, (LHS), (RHS))
 #define CHECK_NE(LHS, RHS) test.check_ne(__LINE__, #LHS, #RHS, (LHS), (RHS))
@@ -23,13 +25,13 @@ public:
         }
     }
 
-    template<class T>
+    template<class T, class U>
     void check_eq(
         int line,
         const char *lhs_expr,
         const char *rhs_expr,
         const T &lhs,
-        const std::type_identity_t<T> &rhs
+        const U &rhs
     ) {
         if (lhs != rhs) {
             std::cerr << "  assertion failed at line " << line << ": " << lhs_expr
@@ -171,8 +173,7 @@ bool _ = TestRunner::tests
 
                      CHECK_TRUE(!ref.unique());
                      CHECK_TRUE(ref.shared());
-                     CHECK_EQ(ref.size(), 0);
-                     CHECK_EQ(ref.length(), 0);
+                     CHECK_EQ(ref, ""sv);
                  }
              )
 
@@ -182,11 +183,9 @@ bool _ = TestRunner::tests
                      std::string str = "hello, world";
                      StringRef ref(str);
 
-                     CHECK_EQ(ref.view(), str);
+                     CHECK_EQ(ref, str);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
-                     CHECK_EQ(ref.size(), str.size());
-                     CHECK_EQ(ref.length(), str.length());
                  }
              )
 
@@ -197,11 +196,9 @@ bool _ = TestRunner::tests
                      str = str.substr(0, 5);
                      StringRef ref(str);
 
-                     CHECK_EQ(ref.view(), str);
+                     CHECK_EQ(ref, str);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
-                     CHECK_EQ(ref.size(), str.size());
-                     CHECK_EQ(ref.length(), str.length());
                  }
              )
 
@@ -211,11 +208,9 @@ bool _ = TestRunner::tests
                      const char str[] = "hello, world";
                      StringRef ref(str);
 
-                     CHECK_EQ(ref.view(), str);
+                     CHECK_EQ(ref, std::string_view(str));
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
-                     CHECK_EQ(ref.size(), sizeof(str) - 1);
-                     CHECK_EQ(ref.length(), sizeof(str) - 1);
                  }
              )
 
@@ -225,11 +220,9 @@ bool _ = TestRunner::tests
                      const char str[] = "hello, world";
                      StringRef ref(str, 5);
 
-                     CHECK_EQ(ref.view(), "hello");
+                     CHECK_EQ(ref, "hello"sv);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
-                     CHECK_EQ(ref.size(), 5);
-                     CHECK_EQ(ref.length(), 5);
                  }
              )
 
@@ -245,8 +238,6 @@ bool _ = TestRunner::tests
                      CHECK_TRUE(!copy.unique());
                      CHECK_TRUE(ref.shared());
                      CHECK_TRUE(copy.shared());
-                     CHECK_EQ(ref.size(), copy.size());
-                     CHECK_EQ(ref.length(), copy.length());
                  }
              )
 
@@ -262,8 +253,6 @@ bool _ = TestRunner::tests
                      CHECK_TRUE(!b.unique());
                      CHECK_TRUE(a.shared());
                      CHECK_TRUE(b.shared());
-                     CHECK_EQ(a.size(), b.size());
-                     CHECK_EQ(a.length(), b.length());
                  }
              )
 
@@ -274,7 +263,7 @@ bool _ = TestRunner::tests
                      StringRef a(hello);
                      StringRef b(std::move(a));
 
-                     CHECK_EQ(b.view(), hello);
+                     CHECK_EQ(b, hello);
                      CHECK_TRUE(b.unique());
                      CHECK_TRUE(!b.shared());
                  }
@@ -292,7 +281,7 @@ bool _ = TestRunner::tests
                          ref = std::move(hello_ref);
                      }
 
-                     CHECK_EQ(ref.view(), hello);
+                     CHECK_EQ(ref, hello);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
                  }
@@ -305,7 +294,7 @@ bool _ = TestRunner::tests
                      StringRef ref(hello);
                      ref = ref;
 
-                     CHECK_EQ(ref.view(), hello);
+                     CHECK_EQ(ref, hello);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
                  }
@@ -318,7 +307,7 @@ bool _ = TestRunner::tests
                      StringRef ref(hello);
                      ref = std::move(ref);
 
-                     CHECK_EQ(ref.view(), hello);
+                     CHECK_EQ(ref, hello);
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
                  }
@@ -330,7 +319,7 @@ bool _ = TestRunner::tests
                      StringRef ref = "hello";
                      ref = "world";
 
-                     CHECK_EQ(ref.view(), "world");
+                     CHECK_EQ(ref, "world");
                      CHECK_TRUE(ref.unique());
                      CHECK_TRUE(!ref.shared());
                  }
@@ -348,7 +337,7 @@ bool _ = TestRunner::tests
                      str[3] = '4';
                      str[4] = '5';
 
-                     CHECK_EQ(ref.view(), hello);
+                     CHECK_EQ(ref, hello);
                  }
              )
 
@@ -382,22 +371,22 @@ bool _ = TestRunner::tests
 
                      bubble_sort(refs);
 
-                     CHECK_EQ(refs[0].view(), "amet");
+                     CHECK_EQ(refs[0], "amet");
                      CHECK_TRUE(refs[0].unique());
 
-                     CHECK_EQ(refs[1].view(), "dolor");
+                     CHECK_EQ(refs[1], "dolor");
                      CHECK_TRUE(refs[1].unique());
 
-                     CHECK_EQ(refs[2].view(), "ipsum");
+                     CHECK_EQ(refs[2], "ipsum");
                      CHECK_TRUE(refs[2].unique());
 
-                     CHECK_EQ(refs[3].view(), "lorem");
+                     CHECK_EQ(refs[3], "lorem");
                      CHECK_TRUE(refs[3].unique());
 
-                     CHECK_EQ(refs[4].view(), "shared");
+                     CHECK_EQ(refs[4], "shared");
                      CHECK_TRUE(refs[4].shared());
 
-                     CHECK_EQ(refs[5].view(), "sit");
+                     CHECK_EQ(refs[5], "sit");
                      CHECK_TRUE(refs[5].unique());
                  }
              )

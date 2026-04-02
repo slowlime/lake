@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
-#include <string>
 #include <string_view>
 #include <utility>
 
@@ -15,7 +14,7 @@
 
 class StringRef {
 public:
-    StringRef() = default;
+    StringRef() noexcept = default;
 
     ~StringRef() noexcept {
 #ifdef STRING_REF_DEBUG
@@ -28,14 +27,13 @@ public:
         }
     }
 
-    explicit StringRef(const std::string &s) : StringRef(s.data(), s.size()) {}
-    explicit StringRef(std::string_view s) : StringRef(s.data(), s.size()) {}
-    explicit StringRef(const char *s) : StringRef(s, strlen(s)) {}
+    StringRef(std::string_view s) : StringRef(s.data(), s.size()) {}
+    StringRef(const char *s) : StringRef(s, strlen(s)) {}
 
     StringRef(const char *s, size_t len) {
         s_ = new char[len + 1];
-        len_ = len;
         memcpy(s_, s, len);
+        s_[len] = '\0';
         mark_unique();
     }
 
@@ -50,7 +48,6 @@ public:
 
         other.mark_shared();
         s_ = other.s_;
-        len_ = other.len_;
 
         return *this;
     }
@@ -65,7 +62,6 @@ public:
         }
 
         std::swap(s_, other.s_);
-        std::swap(len_, other.len_);
 
         return *this;
     }
@@ -83,31 +79,31 @@ public:
     }
 
     std::string_view view() const noexcept {
-        return {get(), len_};
-    }
-
-    size_t size() const noexcept {
-        return len_;
-    }
-
-    size_t length() const noexcept {
-        return len_;
+        return {get(), strlen(get())};
     }
 
     bool operator==(const StringRef &other) const noexcept {
-        return view() == other.view();
+        return strcmp(get(), other.get()) == 0;
     }
 
     bool operator==(std::string_view other) const noexcept {
-        return view() == other;
+        return get() == other;
+    }
+
+    bool operator==(const char *other) const noexcept {
+        return strcmp(get(), other) == 0;
     }
 
     std::strong_ordering operator<=>(const StringRef &other) const noexcept {
-        return view() <=> other.view();
+        return strcmp(get(), other.get()) <=> 0;
     }
 
     std::strong_ordering operator<=>(std::string_view other) const noexcept {
-        return view() <=> other;
+        return get() <=> other;
+    }
+
+    std::strong_ordering operator<=>(const char *other) const noexcept {
+        return strcmp(get(), other) <=> 0;
     }
 
     friend std::ostream &operator<<(std::ostream &s, const StringRef &ref) {
@@ -117,6 +113,7 @@ public:
 
 private:
     static constexpr uintptr_t mark_bit = 1;
+    static inline char empty alignas(sizeof(uintptr_t)) = '\0';
 
     char *ptr() const noexcept {
         // NOLINTNEXTLINE(performance-no-int-to-ptr)
@@ -127,11 +124,16 @@ private:
         return (reinterpret_cast<uintptr_t>(s_) & mark_bit) != 0;
     }
 
-    void set_mark(bool unique) const noexcept {
+    // NOLINTNEXTLINE(readability-non-const-parameter)
+    static char *with_mark(char *p, bool unique) noexcept {
         // NOLINTNEXTLINE(performance-no-int-to-ptr)
-        s_ = reinterpret_cast<char *>(
-            (reinterpret_cast<uintptr_t>(s_) & ~mark_bit) | uintptr_t(unique) * mark_bit
+        return reinterpret_cast<char *>(
+            (reinterpret_cast<uintptr_t>(p) & ~mark_bit) | uintptr_t(unique) * mark_bit
         );
+    }
+
+    void set_mark(bool unique) const noexcept {
+        s_ = with_mark(s_, unique);
     }
 
     void mark_unique() const noexcept {
@@ -142,6 +144,5 @@ private:
         set_mark(false);
     }
 
-    mutable char *s_ = nullptr;
-    size_t len_ = 0;
+    mutable char *s_ = with_mark(&empty, false);
 };
