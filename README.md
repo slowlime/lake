@@ -1,6 +1,5 @@
 # Memory allocation experiments
-This repository houses two memory allocation experiments: a single-threaded version and a multi-threaded one.
-
+This repository houses various memory allocation experiments.
 To build them, run `make`.
 You'll need a C++20-capable compiler.
 
@@ -79,3 +78,12 @@ Strategy | Time (utime, μs) | Time (wall, s) | Memory (B) | Reported overhead (
 `mutex` | 22862510 | 9.06 | 2553077760 | -0.3
 `atomic` | 88821150 | 6.63 | 2553204736 | -0.3
 `thread-local` | 406772 | 0.21 | 2554327040 | -0.2
+
+## String reference (`string-ref.hpp`)
+A small reference-counted string implementation, with one caveat: the counter takes only 1 bit.
+In other words, the reference wrapper only tracks uniqueness (conservatively).
+As long as the reference is not copied, it's guaranteed to be unique, allowing to free the backing storage on destruction.
+If it *is* copied, however, the string's contents won't ever be freed, causing a memory leak.
+
+A small test suite is provided in `string-ref-test.cpp`.
+Run `string-ref-test` after building with Make.
