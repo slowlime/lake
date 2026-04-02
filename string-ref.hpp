@@ -112,11 +112,19 @@ public:
         return view() == other;
     }
 
+    bool operator==(const char *other) const noexcept {
+        return view() == other;
+    }
+
     std::strong_ordering operator<=>(const StringRef &other) const noexcept {
         return view() <=> other.view();
     }
 
     std::strong_ordering operator<=>(std::string_view other) const noexcept {
+        return view() <=> other;
+    }
+
+    std::strong_ordering operator<=>(const char *other) const noexcept {
         return view() <=> other;
     }
 

@@ -325,6 +325,18 @@ bool _ = TestRunner::tests
              )
 
              .add(
+                 "assign: string",
+                 [](auto &test) {
+                     StringRef ref = "hello";
+                     ref = "world";
+
+                     CHECK_EQ(ref.view(), "world");
+                     CHECK_TRUE(ref.unique());
+                     CHECK_TRUE(!ref.shared());
+                 }
+             )
+
+             .add(
                  "source mutation",
                  [](auto &test) {
                      std::string_view hello = "hello";
