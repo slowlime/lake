@@ -1,3 +1,4 @@
 *.o
 alloc
 threaded
+string-ref-test
