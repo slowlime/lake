@@ -26,13 +26,8 @@ public:
     }
 
     template<class T, class U>
-    void check_eq(
-        int line,
-        const char *lhs_expr,
-        const char *rhs_expr,
-        const T &lhs,
-        const U &rhs
-    ) {
+    void
+    check_eq(int line, const char *lhs_expr, const char *rhs_expr, const T &lhs, const U &rhs) {
         if (lhs != rhs) {
             std::cerr << "  assertion failed at line " << line << ": " << lhs_expr
                       << " == " << rhs_expr << '\n';
@@ -171,6 +166,7 @@ bool _ = TestRunner::tests
                  [](auto &test) {
                      StringRef ref;
 
+                     CHECK_EQ(ref.get(), nullptr);
                      CHECK_TRUE(!ref.unique());
                      CHECK_TRUE(ref.shared());
                      CHECK_EQ(ref, ""sv);
@@ -354,6 +350,21 @@ bool _ = TestRunner::tests
                      CHECK_TRUE(hello != world);
                      CHECK_TRUE(hello < world);
                      CHECK_TRUE(!(hello >= world));
+                 }
+             )
+
+             .add(
+                 "null",
+                 [](auto &test) {
+                     StringRef a;
+                     StringRef b;
+                     StringRef hello = "hello";
+
+                     CHECK_EQ(a, b);
+                     CHECK_NE(a, hello);
+                     CHECK_TRUE(a <= hello);
+                     CHECK_EQ(a, nullptr);
+                     CHECK_NE(hello, nullptr);
                  }
              )
 
