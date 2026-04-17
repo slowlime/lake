@@ -1,5 +1,4 @@
 #include "blackbox.hpp"
-#include <atomic>
 #include <cassert>
 #include <csetjmp>
 #include <csignal>

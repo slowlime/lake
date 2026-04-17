@@ -1,5 +1,5 @@
-# Memory allocation experiments
-This repository houses various memory allocation experiments.
+# Memory experiments
+This repository houses various memory experiments.
 To build them, run `make`.
 You'll need a C++20-capable compiler.
 
@@ -87,3 +87,9 @@ If it *is* copied, however, the string's contents won't ever be freed, causing a
 
 A small test suite is provided in `string-ref-test.cpp`.
 Run `string-ref-test` after building with Make.
+
+## Protected memory load (`safe-read.cpp`)
+An implementation of a protected memory load routine, which allows reading a byte at an arbitrary memory location.
+If the byte is inaccessible, returns `std::nullopt`.
+
+The program is only valid provided it's run single-threaded.
