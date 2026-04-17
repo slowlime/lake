@@ -33,7 +33,7 @@ static void dispatch_to_prev(int sig, siginfo_t *info, void *uctx) noexcept {
 
 static void on_access_fault(int sig, siginfo_t *info, void *uctx) noexcept {
     if (info->si_code == SI_USER) {
-        return;
+        dispatch_to_prev(sig, info, uctx);
     }
 
     siglongjmp(jbuf, 1);
