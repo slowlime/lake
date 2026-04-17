@@ -5,7 +5,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
+#include <iostream>
 #include <optional>
+#include <sys/mman.h>
 #include <unistd.h>
 
 static struct sigaction prev_segv, prev_bus;
@@ -80,4 +83,47 @@ int main(int, char **) {
 
     assert(!safe_read_u8(ptr).has_value());
     assert(safe_read_u8(&foo) == 42);
+
+    void *reg = mmap(nullptr, 64, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
+
+    if (reg == MAP_FAILED) {
+        perror("could not mmap memory");
+        return 1;
+    }
+
+    assert(!safe_read_u8(reg).has_value());
+
+    if (munmap(reg, 64) < 0) {
+        perror("could not munmap memory");
+        return 1;
+    }
+
+    assert(!safe_read_u8(reg).has_value());
+
+    char tmp_name[] = "/tmp/safe-read-XXXXXX";
+    auto fd = mkstemp(tmp_name);
+
+    if (fd < 0) {
+        perror("could not create a temporary file");
+        return 1;
+    }
+
+    void *file_reg = mmap(nullptr, 64, PROT_READ, MAP_PRIVATE, fd, 0);
+
+    if (unlink(tmp_name) < 0) {
+        perror("could not remove the temporary file");
+    }
+
+    if (file_reg == MAP_FAILED) {
+        perror("could not mmap /dev/null");
+        return 1;
+    }
+
+    assert(!safe_read_u8(file_reg).has_value());
+
+    if (munmap(file_reg, 64) < 0) {
+        perror("could not munmap /dev/null");
+    }
+
+    std::cout << "all assertions passed\n";
 }
