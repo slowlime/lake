@@ -3,7 +3,7 @@ CXXFLAGS ?= -O2
 
 .PHONY: all clean
 
-all: alloc threaded string-ref-test
+all: alloc threaded string-ref-test safe-read
 
 clean:
 	rm -f alloc threaded string-ref-test *.o
@@ -16,6 +16,9 @@ threaded: threaded.o blackbox.o pool.o
 
 string-ref-test: string-ref-test.o
 	$(CXX) -std=c++20 $(CXXFLAGS) $^ -o $@
+
+safe-read: safe-read.o blackbox.o
+	$(CXX) -D_POSIX_C_SOURCE=202405L -std=c++20 $(CXXFLAGS) $^ -o $@
 
 %.o: %.cpp
 	$(CXX) -D_POSIX_C_SOURCE=202405L -std=c++20 $(CXXFLAGS) -c $< -o $@
