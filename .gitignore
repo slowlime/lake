@@ -3,3 +3,4 @@ alloc
 threaded
 string-ref-test
 safe-read
+parallel-copy

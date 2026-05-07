@@ -93,3 +93,22 @@ An implementation of a protected memory load routine, which allows reading a byt
 If the byte is inaccessible, returns `std::nullopt`.
 
 The program is only valid provided it's run single-threaded.
+
+## Parallel memory copy (`parallel-copy.cpp`)
+Measures how long it takes to copy a chunk of memory (256 MB) in parallel.
+The number of worker threads is specified via a command-line argument, with the default being the number of available threads minus one.
+This is because the thread initiating the copy does a part of the copying itself in addition to the worker threads.
+
+On my machine, the results are as follows:
+
+No. of worker threads | Time (ms)
+:--------------------:|:---------
+0 | 14.9
+1 | 12.2
+2 | 10.2
+3 | 8.7
+4 | 9.4
+5 | 8.4
+6 | 8.8
+7 | 8.4
+8 | 8.6
